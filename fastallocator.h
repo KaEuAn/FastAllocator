@@ -132,6 +132,9 @@ public:
 template <typename T>
 class FastAllocator{
     FixedAllocator<sizeof(T)> myAlloc;
+    static bool condition(uint32_t size) {
+        return size == 1;
+    }
 
 public:
 
@@ -154,13 +157,13 @@ public:
     }
 
     inline pointer allocate(uint32_t size) {
-        if (size == 1)
+        if (condition(size))
             return static_cast<pointer>(myAlloc.allocate());
         else
             return static_cast<pointer>(::operator new(size * sizeof(T)));
     }
     inline void deallocate(pointer p, uint32_t size) {
-        if (size == 1)
+        if (condition(size))
             myAlloc.deallocate(static_cast<void *>(p));
         else
             ::operator delete(p);
@@ -205,6 +208,20 @@ class List{
         --_size;
     }
 
+    void destruct() {
+        if (_size == 0)
+            return;
+        Node* currentNode = startNode;
+        for (int i = 0; i < _size; ++i) {
+            Node* nextNode = currentNode->next;
+            forwardErase(currentNode);
+            currentNode = nextNode;
+        }
+        _size = 0;
+        startNode = nullptr;
+        endNode = nullptr;
+
+    }
 
 public:
 
@@ -240,21 +257,41 @@ public:
         other.startNode = nullptr;
         other.endNode = nullptr;
     }
-    template<typename _T>
-    List& operator= (_T&& other) {
-        this->~List();
-        this->List(std::forward<_T>(other));
+
+    List& operator= (List&& other) {
+        destruct();
+        std::swap(startNode, other.startNode);
+        std::swap(endNode, other.endNode);
+        std::swap(nodeAlloc, other.nodeAlloc);
+        std::swap(_size, other._size);
         return *this;
     }
-    ~List() {
+    List& operator= (const List& other) {
+        destruct();
+        _size = other._size;
         if (_size == 0)
-            return;
+            return *this;
+        startNode = nodeAlloc.allocate(1);
+        Node* otherCurrentNode = other.startNode;
+        nodeAlloc.construct(startNode, otherCurrentNode->value);
+        startNode->prev = nullptr;
         Node* currentNode = startNode;
-        for (int i = 0; i < _size; ++i) {
-            Node* nextNode = currentNode->next;
-            forwardErase(currentNode);
-            currentNode = nextNode;
+        otherCurrentNode = otherCurrentNode->next;
+        while(otherCurrentNode) {
+            Node* newNode = nodeAlloc.allocate(1);
+            nodeAlloc.construct(newNode, otherCurrentNode->value, otherCurrentNode->prev, otherCurrentNode->next);
+            currentNode->next = newNode;
+            newNode->prev = currentNode;
+            currentNode = newNode;
+            otherCurrentNode = otherCurrentNode->next;
         }
+        endNode = currentNode;
+        endNode->next = nullptr;
+        return *this;
+    }
+
+    ~List() {
+        destruct();
     }
 
     const uint32_t size() const {
@@ -291,6 +328,7 @@ public:
             prevNode->next = nextNode;
         forwardErase(eraseNode);
     }
+
 
     template<typename _T>
     void push_back(_T&& newValue) {

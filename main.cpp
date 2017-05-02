@@ -35,4 +35,10 @@ void testAll() {
 }
 int main() {
     testAll<int>();
+    List<int> x;
+    x.push_back(7);
+    List<int> y;
+    y = x;
+    y.push_back(8);
+    List<int>z(std::move(y));
 }
