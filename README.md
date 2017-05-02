@@ -1,0 +1,1 @@
+This project contains a realization of FastAllocator and List which are light versions of standart library classes and do the same things quicker.
